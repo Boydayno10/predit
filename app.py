@@ -78,35 +78,68 @@ def analisar(registros: List[Registro]) -> dict:
     agora = datetime.now()
 
     if not registros:
-        return {"decisao": "aguardar", "regra": "estatistica_real"}
+        return {
+            "decisao": "aguardar",
+            "regra": "estatistica_real",
+            "motivo_regra": "Sem registros para analise temporal.",
+        }
 
     altos = [r for r in registros if r.mult >= 10]
     if not altos:
-        return {"decisao": "aguardar", "regra": "estatistica_real"}
+        return {
+            "decisao": "aguardar",
+            "regra": "estatistica_real",
+            "motivo_regra": "Sem multiplicador 10+ no recorte.",
+        }
+
+    ultimo = altos[-1]
+    seg_desde_ultimo = int((agora - ultimo.dt).total_seconds())
+
+    # Estatistica real so entra quando NAO ha alto nos ultimos 5 minutos.
+    if seg_desde_ultimo > 300:
+        return _analise_estatistica_real(registros)
 
     # ================= REGRA DO ESPELHO (INTERVALO ENTRE OS DOIS ULTIMOS ALTOS) =================
     idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
     gap_atual = (len(registros) - 1) - idx_altos[-1]
 
     if len(altos) >= 2 and gap_atual == 0:
-        ultimo = altos[-1]
         penultimo = altos[-2]
-
         intervalo_espelho = int((ultimo.dt - penultimo.dt).total_seconds())
 
         if 30 <= intervalo_espelho <= 300:
             dt_prev = ultimo.dt + timedelta(seconds=intervalo_espelho)
-            if dt_prev <= agora:
-                dt_prev = agora + timedelta(seconds=30)
+            if dt_prev > agora:
+                return {
+                    "decisao": "aguardar",
+                    "regra": "espelho_intervalo_altos",
+                    "motivo_regra": "Ha alto recente e o espelho entre os dois ultimos altos ainda esta ativo.",
+                    "intervalo_usado_segundos": intervalo_espelho,
+                    "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+                }
 
-            return {
-                "decisao": "aguardar",
-                "regra": "espelho_intervalo_altos",
-                "intervalo_usado_segundos": intervalo_espelho,
-                "hora_prevista": dt_prev.strftime("%H:%M:%S"),
-            }
+    # ================= REGRA 4-5 MINUTOS (apos expirar espelho) =================
+    if seg_desde_ultimo < 240:
+        dt_prev = ultimo.dt + timedelta(seconds=240)
+        return {
+            "decisao": "aguardar",
+            "regra": "regra_4_minutos",
+            "motivo_regra": "Espelho expirou/nao aplicou e o ultimo alto ainda esta antes do minuto 4.",
+            "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+        }
 
+    dt_prev = ultimo.dt + timedelta(seconds=300)
+    return {
+        "decisao": "aguardar",
+        "regra": "regra_5_minutos",
+        "motivo_regra": "Espelho expirou/nao aplicou e o ciclo temporal esta na janela 4-5 minutos.",
+        "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+    }
+
+
+def _analise_estatistica_real(registros: List[Registro]) -> dict:
     # ================= ESTATISTICA REAL =================
+    idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
     gaps = [idx_altos[i] - idx_altos[i - 1] for i in range(1, len(idx_altos))]
     gap_medio = median(gaps) if gaps else 8
     gap_atual = (len(registros) - 1) - idx_altos[-1]
@@ -144,6 +177,7 @@ def analisar(registros: List[Registro]) -> dict:
     return {
         "decisao": "aguardar",
         "regra": "estatistica_real",
+        "motivo_regra": "Nao houve alto nos ultimos 5 minutos; usando modelo estatistico.",
         "nivel_pressao": nivel,
         "score_probabilidade": score_final,
         "gap_atual": gap_atual,
