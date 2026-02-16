@@ -22,6 +22,7 @@ class PainelPredit:
         self.status_var = tk.StringVar(value="Pronto")
         self.hora_var = tk.StringVar(value="--:--:--")
         self.regra_var = tk.StringVar(value="-")
+        self.regra_sub_var = tk.StringVar(value="")
         self.detalhe_var = tk.StringVar(value="")
 
         self._fetching = False
@@ -43,6 +44,7 @@ class PainelPredit:
         style.configure("PanelTitle.TLabel", background="#141e2f", foreground="#d7deef", font=("Segoe UI", 10, "bold"))
         style.configure("ValueTime.TLabel", background="#141e2f", foreground="#8ff0c6", font=("Consolas", 37, "bold"))
         style.configure("ValueRule.TLabel", background="#141e2f", foreground="#f5f7ff", font=("Segoe UI", 15, "bold"))
+        style.configure("RuleSub.TLabel", background="#141e2f", foreground="#9db0cf", font=("Segoe UI", 10))
         style.configure("Detail.TLabel", background="#141e2f", foreground="#9db0cf", font=("Segoe UI", 9))
         style.configure("TLabel", background="#0d1320", foreground="#d7deef")
         style.configure("TCheckbutton", background="#0d1320", foreground="#d7deef")
@@ -98,6 +100,7 @@ class PainelPredit:
         card_regra.pack(side="left", fill="x", expand=True)
         ttk.Label(card_regra, text="Regra Ativa", style="PanelTitle.TLabel").pack(anchor="w")
         ttk.Label(card_regra, textvariable=self.regra_var, style="ValueRule.TLabel").pack(anchor="w", pady=(18, 0))
+        ttk.Label(card_regra, textvariable=self.regra_sub_var, style="RuleSub.TLabel").pack(anchor="w", pady=(6, 0))
 
         ttk.Label(main, textvariable=self.status_var).pack(anchor="w", pady=(8, 0))
 
@@ -146,6 +149,51 @@ class PainelPredit:
 
         return ""
 
+    @staticmethod
+    def _seconds_since_time(h: datetime) -> int:
+        now = datetime.now()
+        now_s = now.hour * 3600 + now.minute * 60 + now.second
+        h_s = h.hour * 3600 + h.minute * 60 + h.second
+        d = now_s - h_s
+        if d < 0:
+            d += 24 * 3600
+        return d
+
+    def _build_regra_display(self, data: dict, analise: dict, regra_raw: str) -> tuple[str, str]:
+        mults = data.get("ultimos_60_multiplicadores", []) if isinstance(data, dict) else []
+        parsed = [self._parse_mult_line(x) for x in mults if isinstance(x, str)]
+        parsed = [p for p in parsed if p is not None]
+        altos = [p for p in parsed if p[0] >= 10.0]
+        regra_norm = (regra_raw or "").lower()
+
+        if "espelho" in regra_norm and len(altos) >= 2:
+            m1, t1 = altos[-2]
+            m2, t2 = altos[-1]
+            diff = int((t2 - t1).total_seconds())
+            if diff < 0:
+                diff += 24 * 3600
+            inter = analise.get("intervalo_usado_segundos")
+            intervalo = int(inter) if isinstance(inter, (int, float)) else diff
+            return (f"Intervalo {intervalo}s", f"{m1:.2f}x - {m2:.2f}x")
+
+        if regra_norm in {"regra_4_minutos", "regra_5_minutos"} and len(altos) >= 1:
+            m, _ = altos[-1]
+            if regra_norm == "regra_4_minutos":
+                return ("4 Minutos", f"Referencia: {m:.2f}x")
+            return ("5 Minutos", f"Referencia: {m:.2f}x")
+
+        if "estatistica" in regra_norm:
+            if altos:
+                _, last_t = altos[-1]
+                sem_altos_5m = self._seconds_since_time(last_t) > 300
+            else:
+                sem_altos_5m = True
+
+            if sem_altos_5m:
+                return ("Sem Multiplicadores Altos", "5.00x - 9.00x")
+
+        return (self._format_regra(regra_raw), "")
+
     def on_predict(self) -> None:
         if self._fetching:
             return
@@ -175,8 +223,10 @@ class PainelPredit:
         regra_raw = data.get("regra") or analise.get("regra") or data.get("regra_previsao") or "-"
 
         self.hora_var.set(str(hora))
-        self.regra_var.set(self._format_regra(str(regra_raw)))
-        self.detalhe_var.set(self._build_detalhe(data, analise, str(regra_raw)))
+        regra_main, regra_sub = self._build_regra_display(data, analise, str(regra_raw))
+        self.regra_var.set(regra_main)
+        self.regra_sub_var.set(regra_sub)
+        self.detalhe_var.set("")
 
         self.status_var.set("Atualizado")
         self.btn_predict.config(state="normal")
