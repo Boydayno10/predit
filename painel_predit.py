@@ -174,13 +174,16 @@ class PainelPredit:
                 diff += 24 * 3600
             inter = analise.get("intervalo_usado_segundos")
             intervalo = int(inter) if isinstance(inter, (int, float)) else diff
-            return (f"Intervalo {intervalo}s", f"{m1:.2f}x - {m2:.2f}x")
+            return (
+                f"Intervalo {intervalo}s",
+                f"{m1:.2f}x ({t1.strftime('%H:%M:%S')}) - {m2:.2f}x ({t2.strftime('%H:%M:%S')})",
+            )
 
         if regra_norm in {"regra_4_minutos", "regra_5_minutos"} and len(altos) >= 1:
-            m, _ = altos[-1]
+            m, t = altos[-1]
             if regra_norm == "regra_4_minutos":
-                return ("4 Minutos", f"Referencia: {m:.2f}x")
-            return ("5 Minutos", f"Referencia: {m:.2f}x")
+                return ("4 Minutos", f"Referencia: {m:.2f}x ({t.strftime('%H:%M:%S')})")
+            return ("5 Minutos", f"Referencia: {m:.2f}x ({t.strftime('%H:%M:%S')})")
 
         if "estatistica" in regra_norm:
             if altos:
