@@ -109,26 +109,22 @@ def analisar(registros: List[Registro]) -> dict:
     referencia_tempo = max(agora, registros[-1].dt)
 
     ultimo = altos[-1]
-    seg_desde_ultimo = int((referencia_tempo - ultimo.dt).total_seconds())
-
-    # ================= REGRA DO ESPELHO (INTERVALO ENTRE OS DOIS ULTIMOS ALTOS) =================
-    idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
+    # ================= REGRA DO ESPELHO (somente se o ultimo alto veio ate 2:30 apos o penultimo) =================
     if len(altos) >= 2:
         penultimo = altos[-2]
         intervalo_espelho = int((ultimo.dt - penultimo.dt).total_seconds())
-
-        # A regra de espelho fica ativa por 2:30 apos o ultimo alto,
-        # mesmo com multiplicadores baixos aparecendo no meio.
-        if 30 <= intervalo_espelho <= 300 and seg_desde_ultimo < janela_espelho_seg:
-            dt_prev = ultimo.dt + timedelta(seconds=max(intervalo_espelho, janela_espelho_seg))
-            dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
-            return {
-                "decisao": "aguardar",
-                "regra": "espelho_intervalo_altos",
-                "motivo_regra": "Intervalo de espelho bloqueado por 2:30 apos o ultimo alto.",
-                "intervalo_usado_segundos": intervalo_espelho,
-                "hora_prevista": dt_prev.strftime("%H:%M:%S"),
-            }
+        if 1 <= intervalo_espelho <= janela_espelho_seg:
+            dt_espelho = ultimo.dt + timedelta(seconds=intervalo_espelho)
+            # Espelho vale somente ate o horario previsto pelo proprio intervalo.
+            if referencia_tempo < dt_espelho:
+                dt_prev = garantir_hora_futura(dt_espelho, referencia_tempo, 30)
+                return {
+                    "decisao": "aguardar",
+                    "regra": "espelho_intervalo_altos",
+                    "motivo_regra": "Dois altos em ate 2:30; projetando pelo intervalo entre eles.",
+                    "intervalo_usado_segundos": intervalo_espelho,
+                    "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+                }
 
     # ================= REGRA 4-5 MINUTOS (contagem continua desde o ultimo alto) =================
     dt_4 = ultimo.dt + timedelta(seconds=240)
