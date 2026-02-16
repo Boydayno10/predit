@@ -88,6 +88,7 @@ def garantir_hora_futura(dt_prev: datetime, referencia: datetime, passo_segundos
 def analisar(registros: List[Registro]) -> dict:
     agora = datetime.now()
     referencia_tempo = agora
+    janela_espelho_seg = 150  # 2:30
 
     if not registros:
         return {
@@ -110,53 +111,53 @@ def analisar(registros: List[Registro]) -> dict:
     ultimo = altos[-1]
     seg_desde_ultimo = int((referencia_tempo - ultimo.dt).total_seconds())
 
-    # Estatistica real so entra quando NAO ha alto nos ultimos 5 minutos.
-    if seg_desde_ultimo > 300:
-        return _analise_estatistica_real(registros, referencia_tempo)
-
     # ================= REGRA DO ESPELHO (INTERVALO ENTRE OS DOIS ULTIMOS ALTOS) =================
     idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
-    gap_atual = (len(registros) - 1) - idx_altos[-1]
-
-    if len(altos) >= 2 and gap_atual == 0:
+    if len(altos) >= 2:
         penultimo = altos[-2]
         intervalo_espelho = int((ultimo.dt - penultimo.dt).total_seconds())
 
-        if 30 <= intervalo_espelho <= 300:
-            dt_prev = ultimo.dt + timedelta(seconds=intervalo_espelho)
+        # A regra de espelho fica ativa por 2:30 apos o ultimo alto,
+        # mesmo com multiplicadores baixos aparecendo no meio.
+        if 30 <= intervalo_espelho <= 300 and seg_desde_ultimo < janela_espelho_seg:
+            dt_prev = ultimo.dt + timedelta(seconds=max(intervalo_espelho, janela_espelho_seg))
             dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
             return {
                 "decisao": "aguardar",
                 "regra": "espelho_intervalo_altos",
-                "motivo_regra": "Ha alto recente e o espelho entre os dois ultimos altos ainda esta ativo.",
+                "motivo_regra": "Intervalo de espelho bloqueado por 2:30 apos o ultimo alto.",
                 "intervalo_usado_segundos": intervalo_espelho,
                 "hora_prevista": dt_prev.strftime("%H:%M:%S"),
             }
 
-    # ================= REGRA 4-5 MINUTOS (transicao imediata) =================
-    dt_4 = ultimo.dt + timedelta(seconds=240)
-    dt_5 = ultimo.dt + timedelta(seconds=300)
+    # ================= REGRA 4-5 MINUTOS (deslocada apos 2:30) =================
+    dt_4 = ultimo.dt + timedelta(seconds=janela_espelho_seg + 240)
+    dt_5 = ultimo.dt + timedelta(seconds=janela_espelho_seg + 300)
 
-    # Antes de chegar no minuto 4: usa regra de 4 minutos.
+    # Antes de chegar no minuto 4+2:30: usa regra de 4 minutos.
     if referencia_tempo < dt_4:
         dt_prev = dt_4
         dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
         return {
             "decisao": "aguardar",
             "regra": "regra_4_minutos",
-            "motivo_regra": "Espelho expirou/nao aplicou e o ultimo alto ainda esta antes do minuto 4.",
+            "motivo_regra": "Aguardando 4 minutos apos a janela fixa de 2:30.",
             "hora_prevista": dt_prev.strftime("%H:%M:%S"),
         }
 
-    # Assim que chega/passou do minuto 4, troca imediatamente para a regra de 5 minutos.
-    dt_prev = dt_5
-    dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
-    return {
-        "decisao": "aguardar",
-        "regra": "regra_5_minutos",
-        "motivo_regra": "Minuto 4 atingido; transicao imediata para a regra de 5 minutos.",
-        "hora_prevista": dt_prev.strftime("%H:%M:%S"),
-    }
+    # Assim que chega/passou do 4+2:30, troca para 5+2:30.
+    if referencia_tempo < dt_5:
+        dt_prev = dt_5
+        dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
+        return {
+            "decisao": "aguardar",
+            "regra": "regra_5_minutos",
+            "motivo_regra": "Janela 4+2:30 atingida; transicao para 5+2:30.",
+            "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+        }
+
+    # Depois de 5+2:30 sem novo alto, cai para estatistica real.
+    return _analise_estatistica_real(registros, referencia_tempo)
 
 
 def _analise_estatistica_real(registros: List[Registro], referencia_tempo: datetime) -> dict:
