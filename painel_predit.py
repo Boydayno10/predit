@@ -1,7 +1,7 @@
-﻿import copy
-import json
+﻿import json
 import threading
 import tkinter as tk
+from datetime import datetime, timedelta
 from tkinter import ttk
 import urllib.error
 import urllib.request
@@ -13,16 +13,17 @@ class PainelPredit:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Predit Premium")
-        self.root.geometry("860x620")
-        self.root.minsize(760, 560)
+        self.root.geometry("800x340")
+        self.root.minsize(760, 320)
 
         self.url_var = tk.StringVar(value=DEFAULT_API)
-        self.show_multipliers_var = tk.BooleanVar(value=False)
         self.auto_update_var = tk.BooleanVar(value=True)
-        self.interval_var = tk.StringVar(value="10")
+        self.interval_var = tk.StringVar(value="5")
         self.status_var = tk.StringVar(value="Pronto")
         self.hora_var = tk.StringVar(value="--:--:--")
         self.regra_var = tk.StringVar(value="-")
+        self.detalhe_var = tk.StringVar(value="")
+
         self._fetching = False
 
         self._setup_style()
@@ -33,17 +34,18 @@ class PainelPredit:
         if "clam" in style.theme_names():
             style.theme_use("clam")
 
-        self.root.configure(bg="#10131a")
+        self.root.configure(bg="#0d1320")
 
-        style.configure("Main.TFrame", background="#10131a")
-        style.configure("Panel.TFrame", background="#161b25")
-        style.configure("Title.TLabel", background="#10131a", foreground="#f5f7ff", font=("Segoe UI", 17, "bold"))
-        style.configure("Subtitle.TLabel", background="#10131a", foreground="#a8b2c7", font=("Segoe UI", 10))
-        style.configure("PanelTitle.TLabel", background="#161b25", foreground="#d7deef", font=("Segoe UI", 10, "bold"))
-        style.configure("ValueTime.TLabel", background="#161b25", foreground="#8ff0c6", font=("Consolas", 30, "bold"))
-        style.configure("ValueRule.TLabel", background="#161b25", foreground="#f5f7ff", font=("Segoe UI", 15, "bold"))
-        style.configure("TLabel", background="#10131a", foreground="#d7deef")
-        style.configure("TCheckbutton", background="#10131a", foreground="#d7deef")
+        style.configure("Main.TFrame", background="#0d1320")
+        style.configure("Panel.TFrame", background="#141e2f")
+        style.configure("Title.TLabel", background="#0d1320", foreground="#f5f7ff", font=("Segoe UI", 17, "bold"))
+        style.configure("Subtitle.TLabel", background="#0d1320", foreground="#a8b2c7", font=("Segoe UI", 10))
+        style.configure("PanelTitle.TLabel", background="#141e2f", foreground="#d7deef", font=("Segoe UI", 10, "bold"))
+        style.configure("ValueTime.TLabel", background="#141e2f", foreground="#8ff0c6", font=("Consolas", 37, "bold"))
+        style.configure("ValueRule.TLabel", background="#141e2f", foreground="#f5f7ff", font=("Segoe UI", 15, "bold"))
+        style.configure("Detail.TLabel", background="#141e2f", foreground="#9db0cf", font=("Segoe UI", 9))
+        style.configure("TLabel", background="#0d1320", foreground="#d7deef")
+        style.configure("TCheckbutton", background="#0d1320", foreground="#d7deef")
         style.configure("TEntry", fieldbackground="#0f1420", foreground="#eef2ff")
         style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 8))
 
@@ -63,7 +65,7 @@ class PainelPredit:
         self.btn_predict.pack(side="left")
 
         auto_bar = ttk.Frame(main, style="Main.TFrame")
-        auto_bar.pack(fill="x", pady=(0, 8))
+        auto_bar.pack(fill="x", pady=(0, 10))
         ttk.Checkbutton(
             auto_bar,
             text="Atualizacao automatica",
@@ -74,76 +76,32 @@ class PainelPredit:
         self.interval_combo = ttk.Combobox(
             auto_bar,
             textvariable=self.interval_var,
-            values=("5", "10", "15", "20", "30", "60"),
+            values=("3", "5", "10", "15", "20", "30", "60"),
             width=5,
             state="readonly",
         )
         self.interval_combo.pack(side="left")
 
         cards = ttk.Frame(main, style="Main.TFrame")
-        cards.pack(fill="x", pady=(2, 12))
+        cards.pack(fill="x", pady=(2, 6))
 
         card_hora = ttk.Frame(cards, style="Panel.TFrame", padding=12)
         card_hora.pack(side="left", fill="x", expand=True, padx=(0, 8))
         ttk.Label(card_hora, text="Hora Prevista", style="PanelTitle.TLabel").pack(anchor="w")
-        ttk.Label(card_hora, textvariable=self.hora_var, style="ValueTime.TLabel").pack(anchor="w", pady=(4, 0))
+
+        row = ttk.Frame(card_hora, style="Panel.TFrame")
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, textvariable=self.hora_var, style="ValueTime.TLabel").pack(side="left", anchor="w")
+        ttk.Label(row, textvariable=self.detalhe_var, style="Detail.TLabel", justify="left").pack(side="left", anchor="s", padx=(16, 0), pady=(12, 0))
 
         card_regra = ttk.Frame(cards, style="Panel.TFrame", padding=12)
         card_regra.pack(side="left", fill="x", expand=True)
         ttk.Label(card_regra, text="Regra Ativa", style="PanelTitle.TLabel").pack(anchor="w")
-        ttk.Label(card_regra, textvariable=self.regra_var, style="ValueRule.TLabel").pack(anchor="w", pady=(12, 0))
-
-        self.chk = ttk.Checkbutton(
-            main,
-            text="Mostrar multiplicadores",
-            variable=self.show_multipliers_var,
-            command=self._toggle_multipliers,
-        )
-        self.chk.pack(anchor="w", pady=(0, 8))
-
-        self.mult_frame = ttk.Frame(main, style="Panel.TFrame", padding=10)
-        ttk.Label(self.mult_frame, text="Multiplicadores", style="PanelTitle.TLabel").pack(anchor="w", pady=(0, 6))
-        self.mult_text = tk.Text(
-            self.mult_frame,
-            height=10,
-            wrap="word",
-            bg="#0f1420",
-            fg="#dbe5ff",
-            insertbackground="#dbe5ff",
-            relief="flat",
-            padx=8,
-            pady=8,
-        )
-        self.mult_text.pack(fill="both", expand=True)
-        self.mult_text.config(state="disabled")
-
-        result_frame = ttk.Frame(main, style="Panel.TFrame", padding=10)
-        result_frame.pack(fill="both", expand=True)
-        ttk.Label(result_frame, text="Resultado", style="PanelTitle.TLabel").pack(anchor="w", pady=(0, 6))
-        self.result_text = tk.Text(
-            result_frame,
-            wrap="word",
-            bg="#0f1420",
-            fg="#dbe5ff",
-            insertbackground="#dbe5ff",
-            relief="flat",
-            padx=8,
-            pady=8,
-        )
-        self.result_text.pack(fill="both", expand=True)
-        self.result_text.config(state="disabled")
+        ttk.Label(card_regra, textvariable=self.regra_var, style="ValueRule.TLabel").pack(anchor="w", pady=(18, 0))
 
         ttk.Label(main, textvariable=self.status_var).pack(anchor="w", pady=(8, 0))
 
-        self._toggle_multipliers()
         self._schedule_auto(initial=True)
-
-    def _toggle_multipliers(self) -> None:
-        if self.show_multipliers_var.get():
-            self.mult_frame.pack(fill="both", expand=False, pady=(0, 8))
-        else:
-            self.mult_frame.pack_forget()
-            self._set_text(self.mult_text, "")
 
     @staticmethod
     def _format_regra(regra: str) -> str:
@@ -151,6 +109,40 @@ class PainelPredit:
             return "-"
         txt = regra.replace("_", " ").replace("-", " ").strip()
         return " ".join(p.capitalize() for p in txt.split())
+
+    @staticmethod
+    def _parse_mult_line(line: str) -> tuple[float, datetime] | None:
+        try:
+            left, right = line.split(" - ")
+            mtxt = left.replace("x", "").strip()
+            mult = float(mtxt)
+            hora = datetime.strptime(right.strip(), "%H:%M:%S")
+            return mult, hora
+        except Exception:
+            return None
+
+    def _build_detalhe(self, data: dict, analise: dict, regra_raw: str) -> str:
+        mults = data.get("ultimos_60_multiplicadores", []) if isinstance(data, dict) else []
+        parsed = [self._parse_mult_line(x) for x in mults if isinstance(x, str)]
+        parsed = [p for p in parsed if p is not None]
+        altos = [p for p in parsed if p[0] >= 10.0]
+
+        if regra_raw == "espelho_intervalo_altos" and len(altos) >= 2:
+            m1, t1 = altos[-2]
+            m2, t2 = altos[-1]
+            diff = int((t2 - t1).total_seconds())
+            if diff < 0:
+                diff += 24 * 3600
+            inter = analise.get("intervalo_usado_segundos")
+            intervalo = int(inter) if isinstance(inter, (int, float)) else diff
+            return f"{m1:.2f}x | {m2:.2f}x\nintervalo: {intervalo}s"
+
+        if regra_raw in {"regra_4_minutos", "regra_5_minutos"} and len(altos) >= 1:
+            m, _ = altos[-1]
+            plus = "+4m" if regra_raw == "regra_4_minutos" else "+5m"
+            return f"base: {m:.2f}x {plus}"
+
+        return ""
 
     def on_predict(self) -> None:
         if self._fetching:
@@ -171,38 +163,26 @@ class PainelPredit:
                 self.root.after(0, self._render_success, data)
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            self.root.after(0, self._render_error, f"HTTP {e.code}\n{body}")
+            self.root.after(0, self._render_error, f"HTTP {e.code}: {body}")
         except Exception as e:
             self.root.after(0, self._render_error, str(e))
 
     def _render_success(self, data: dict) -> None:
         analise = data.get("analise_estatistica", {}) if isinstance(data, dict) else {}
         hora = analise.get("hora_prevista") or data.get("hora_prevista") or "--:--:--"
-        regra = data.get("regra") or analise.get("regra") or data.get("regra_previsao") or "-"
+        regra_raw = data.get("regra") or analise.get("regra") or data.get("regra_previsao") or "-"
 
         self.hora_var.set(str(hora))
-        self.regra_var.set(self._format_regra(str(regra)))
+        self.regra_var.set(self._format_regra(str(regra_raw)))
+        self.detalhe_var.set(self._build_detalhe(data, analise, str(regra_raw)))
 
-        view_data = copy.deepcopy(data)
-        mults = []
-        if isinstance(view_data, dict):
-            mults = view_data.pop("ultimos_60_multiplicadores", [])
-
-        if self.show_multipliers_var.get() and isinstance(mults, list):
-            self._set_text(self.mult_text, "\n".join(mults))
-        else:
-            self._set_text(self.mult_text, "")
-
-        self._set_text(self.result_text, json.dumps(view_data, indent=2, ensure_ascii=False))
-
-        self.status_var.set("Consulta concluida")
+        self.status_var.set("Atualizado")
         self.btn_predict.config(state="normal")
         self._fetching = False
         self._schedule_auto()
 
     def _render_error(self, msg: str) -> None:
-        self._set_text(self.result_text, msg)
-        self.status_var.set("Erro na consulta")
+        self.status_var.set(f"Erro: {msg}")
         self.btn_predict.config(state="normal")
         self._fetching = False
         self._schedule_auto()
@@ -220,16 +200,9 @@ class PainelPredit:
         try:
             interval = max(2, int(self.interval_var.get()))
         except ValueError:
-            interval = 10
+            interval = 5
         delay_ms = 300 if initial else interval * 1000
         self.root.after(delay_ms, self.on_predict)
-
-    @staticmethod
-    def _set_text(widget: tk.Text, text: str) -> None:
-        widget.config(state="normal")
-        widget.delete("1.0", tk.END)
-        widget.insert("1.0", text)
-        widget.config(state="disabled")
 
 
 def main() -> None:
