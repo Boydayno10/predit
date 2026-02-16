@@ -133,9 +133,13 @@ def analisar(registros: List[Registro]) -> dict:
                 "hora_prevista": dt_prev.strftime("%H:%M:%S"),
             }
 
-    # ================= REGRA 4-5 MINUTOS (apos expirar espelho) =================
-    if seg_desde_ultimo < 240:
-        dt_prev = ultimo.dt + timedelta(seconds=240)
+    # ================= REGRA 4-5 MINUTOS (transicao imediata) =================
+    dt_4 = ultimo.dt + timedelta(seconds=240)
+    dt_5 = ultimo.dt + timedelta(seconds=300)
+
+    # Antes de chegar no minuto 4: usa regra de 4 minutos.
+    if referencia_tempo < dt_4:
+        dt_prev = dt_4
         dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
         return {
             "decisao": "aguardar",
@@ -144,12 +148,13 @@ def analisar(registros: List[Registro]) -> dict:
             "hora_prevista": dt_prev.strftime("%H:%M:%S"),
         }
 
-    dt_prev = ultimo.dt + timedelta(seconds=300)
+    # Assim que chega/passou do minuto 4, troca imediatamente para a regra de 5 minutos.
+    dt_prev = dt_5
     dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
     return {
         "decisao": "aguardar",
         "regra": "regra_5_minutos",
-        "motivo_regra": "Espelho expirou/nao aplicou e o ciclo temporal esta na janela 4-5 minutos.",
+        "motivo_regra": "Minuto 4 atingido; transicao imediata para a regra de 5 minutos.",
         "hora_prevista": dt_prev.strftime("%H:%M:%S"),
     }
 
