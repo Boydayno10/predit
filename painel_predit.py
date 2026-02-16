@@ -127,7 +127,9 @@ class PainelPredit:
         parsed = [p for p in parsed if p is not None]
         altos = [p for p in parsed if p[0] >= 10.0]
 
-        if regra_raw == "espelho_intervalo_altos" and len(altos) >= 2:
+        regra_norm = (regra_raw or "").lower()
+
+        if ("espelho" in regra_norm) and len(altos) >= 2:
             m1, t1 = altos[-2]
             m2, t2 = altos[-1]
             diff = int((t2 - t1).total_seconds())
@@ -137,9 +139,9 @@ class PainelPredit:
             intervalo = int(inter) if isinstance(inter, (int, float)) else diff
             return f"{m1:.2f}x | {m2:.2f}x\nintervalo: {intervalo}s"
 
-        if regra_raw in {"regra_4_minutos", "regra_5_minutos"} and len(altos) >= 1:
+        if regra_norm in {"regra_4_minutos", "regra_5_minutos"} and len(altos) >= 1:
             m, _ = altos[-1]
-            plus = "+4m" if regra_raw == "regra_4_minutos" else "+5m"
+            plus = "+4m" if regra_norm == "regra_4_minutos" else "+5m"
             return f"base: {m:.2f}x {plus}"
 
         return ""
