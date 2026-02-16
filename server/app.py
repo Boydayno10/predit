@@ -16,8 +16,6 @@ DB_URL = os.getenv(
     "FIREBASE_DB_URL",
     "https://multiplicadores-online-default-rtdb.europe-west1.firebasedatabase.app",
 )
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SERVICE_ACCOUNT = os.getenv("FIREBASE_SERVICE_ACCOUNT", os.path.join(BASE_DIR, "adminService.json"))
 SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 
 app = Flask(__name__)
@@ -28,11 +26,12 @@ def init_firebase() -> None:
     if firebase_admin._apps:
         return
 
-    if SERVICE_ACCOUNT_JSON:
-        cred_data = json.loads(SERVICE_ACCOUNT_JSON)
-        cred = credentials.Certificate(cred_data)
-    else:
-        cred = credentials.Certificate(SERVICE_ACCOUNT)
+    if not SERVICE_ACCOUNT_JSON:
+        raise RuntimeError(
+            "Firebase credentials ausentes. Defina FIREBASE_SERVICE_ACCOUNT_JSON."
+        )
+    cred_data = json.loads(SERVICE_ACCOUNT_JSON)
+    cred = credentials.Certificate(cred_data)
 
     firebase_admin.initialize_app(cred, {"databaseURL": DB_URL})
 
