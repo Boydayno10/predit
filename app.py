@@ -130,33 +130,33 @@ def analisar(registros: List[Registro]) -> dict:
                 "hora_prevista": dt_prev.strftime("%H:%M:%S"),
             }
 
-    # ================= REGRA 4-5 MINUTOS (deslocada apos 2:30) =================
-    dt_4 = ultimo.dt + timedelta(seconds=janela_espelho_seg + 240)
-    dt_5 = ultimo.dt + timedelta(seconds=janela_espelho_seg + 300)
+    # ================= REGRA 4-5 MINUTOS (contagem continua desde o ultimo alto) =================
+    dt_4 = ultimo.dt + timedelta(seconds=240)
+    dt_5 = ultimo.dt + timedelta(seconds=300)
 
-    # Antes de chegar no minuto 4+2:30: usa regra de 4 minutos.
+    # Antes de chegar no minuto 4: usa regra de 4 minutos.
     if referencia_tempo < dt_4:
         dt_prev = dt_4
         dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
         return {
             "decisao": "aguardar",
             "regra": "regra_4_minutos",
-            "motivo_regra": "Aguardando 4 minutos apos a janela fixa de 2:30.",
+            "motivo_regra": "Aguardando 4 minutos desde o ultimo multiplicador 10+.",
             "hora_prevista": dt_prev.strftime("%H:%M:%S"),
         }
 
-    # Assim que chega/passou do 4+2:30, troca para 5+2:30.
+    # Assim que chega/passou dos 4 minutos, troca para 5 minutos.
     if referencia_tempo < dt_5:
         dt_prev = dt_5
         dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
         return {
             "decisao": "aguardar",
             "regra": "regra_5_minutos",
-            "motivo_regra": "Janela 4+2:30 atingida; transicao para 5+2:30.",
+            "motivo_regra": "Janela de 4 minutos atingida; transicao para 5 minutos.",
             "hora_prevista": dt_prev.strftime("%H:%M:%S"),
         }
 
-    # Depois de 5+2:30 sem novo alto, cai para estatistica real.
+    # Depois de 5 minutos sem novo alto, cai para estatistica real.
     return _analise_estatistica_real(registros, referencia_tempo)
 
 
