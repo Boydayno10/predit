@@ -1,6 +1,7 @@
-﻿import json
+import json
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from datetime import datetime, timedelta
 from tkinter import ttk
 import urllib.error
@@ -26,9 +27,14 @@ class PainelPredit:
         self.detalhe_var = tk.StringVar(value="")
 
         self._fetching = False
+        self._last_width = 0
+        self.time_font = tkfont.Font(family="Consolas", size=42, weight="bold")
+        self.rule_font = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.rule_sub_font = tkfont.Font(family="Segoe UI", size=10)
 
         self._setup_style()
         self._build_ui()
+        self.root.bind("<Configure>", self._on_resize)
 
     def _setup_style(self) -> None:
         style = ttk.Style(self.root)
@@ -42,9 +48,9 @@ class PainelPredit:
         style.configure("Title.TLabel", background="#0d1320", foreground="#f5f7ff", font=("Segoe UI", 17, "bold"))
         style.configure("Subtitle.TLabel", background="#0d1320", foreground="#a8b2c7", font=("Segoe UI", 10))
         style.configure("PanelTitle.TLabel", background="#141e2f", foreground="#d7deef", font=("Segoe UI", 10, "bold"))
-        style.configure("ValueTime.TLabel", background="#141e2f", foreground="#8ff0c6", font=("Consolas", 37, "bold"))
-        style.configure("ValueRule.TLabel", background="#141e2f", foreground="#f5f7ff", font=("Segoe UI", 15, "bold"))
-        style.configure("RuleSub.TLabel", background="#141e2f", foreground="#9db0cf", font=("Segoe UI", 10))
+        style.configure("ValueTime.TLabel", background="#141e2f", foreground="#8ff0c6", font=self.time_font)
+        style.configure("ValueRule.TLabel", background="#141e2f", foreground="#f5f7ff", font=self.rule_font)
+        style.configure("RuleSub.TLabel", background="#141e2f", foreground="#9db0cf", font=self.rule_sub_font)
         style.configure("Detail.TLabel", background="#141e2f", foreground="#9db0cf", font=("Segoe UI", 9))
         style.configure("TLabel", background="#0d1320", foreground="#d7deef")
         style.configure("TCheckbutton", background="#0d1320", foreground="#d7deef")
@@ -86,9 +92,11 @@ class PainelPredit:
 
         cards = ttk.Frame(main, style="Main.TFrame")
         cards.pack(fill="x", pady=(2, 6))
+        cards.columnconfigure(0, weight=1, uniform="cards")
+        cards.columnconfigure(1, weight=1, uniform="cards")
 
         card_hora = ttk.Frame(cards, style="Panel.TFrame", padding=12)
-        card_hora.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        card_hora.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         ttk.Label(card_hora, text="Hora Prevista", style="PanelTitle.TLabel").pack(anchor="w")
 
         row = ttk.Frame(card_hora, style="Panel.TFrame")
@@ -97,7 +105,7 @@ class PainelPredit:
         ttk.Label(row, textvariable=self.detalhe_var, style="Detail.TLabel", justify="left").pack(side="left", anchor="s", padx=(16, 0), pady=(12, 0))
 
         card_regra = ttk.Frame(cards, style="Panel.TFrame", padding=12)
-        card_regra.pack(side="left", fill="x", expand=True)
+        card_regra.grid(row=0, column=1, sticky="nsew")
         ttk.Label(card_regra, text="Regra Ativa", style="PanelTitle.TLabel").pack(anchor="w")
         ttk.Label(card_regra, textvariable=self.regra_var, style="ValueRule.TLabel").pack(anchor="w", pady=(18, 0))
         ttk.Label(card_regra, textvariable=self.regra_sub_var, style="RuleSub.TLabel").pack(anchor="w", pady=(6, 0))
@@ -258,6 +266,20 @@ class PainelPredit:
             interval = 5
         delay_ms = 300 if initial else interval * 1000
         self.root.after(delay_ms, self.on_predict)
+
+    def _on_resize(self, _event: tk.Event) -> None:
+        width = self.root.winfo_width()
+        if abs(width - self._last_width) < 8:
+            return
+        self._last_width = width
+
+        time_size = max(34, min(56, int(width * 0.06)))
+        rule_size = max(14, min(22, int(width * 0.023)))
+        sub_size = max(9, min(12, int(width * 0.0125)))
+
+        self.time_font.configure(size=time_size)
+        self.rule_font.configure(size=rule_size)
+        self.rule_sub_font.configure(size=sub_size)
 
 
 def main() -> None:
