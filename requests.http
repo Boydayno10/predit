@@ -1,5 +1,0 @@
-﻿### Requisicao unica para testar o Flask localmente
-@baseUrl = http://127.0.0.1:5000
-
-### Bet 10-plus
-GET {{baseUrl}}/bet/10-plus
