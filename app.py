@@ -73,9 +73,21 @@ def carregar_registros(limite: int = 60) -> List[Registro]:
     return regs[-limite:]
 
 
+def garantir_hora_futura(dt_prev: datetime, referencia: datetime, passo_segundos: int = 30) -> datetime:
+    if passo_segundos <= 0:
+        passo_segundos = 30
+    if dt_prev > referencia:
+        return dt_prev
+
+    atraso = int((referencia - dt_prev).total_seconds())
+    saltos = (atraso // passo_segundos) + 1
+    return dt_prev + timedelta(seconds=saltos * passo_segundos)
+
+
 # ================= ANALISE =================
 def analisar(registros: List[Registro]) -> dict:
     agora = datetime.now()
+    referencia_tempo = agora
 
     if not registros:
         return {
@@ -92,12 +104,15 @@ def analisar(registros: List[Registro]) -> dict:
             "motivo_regra": "Sem multiplicador 10+ no recorte.",
         }
 
+    # Alinha a referencia para evitar previsoes no passado em caso de diferenca de fuso/clock.
+    referencia_tempo = max(agora, registros[-1].dt)
+
     ultimo = altos[-1]
-    seg_desde_ultimo = int((agora - ultimo.dt).total_seconds())
+    seg_desde_ultimo = int((referencia_tempo - ultimo.dt).total_seconds())
 
     # Estatistica real so entra quando NAO ha alto nos ultimos 5 minutos.
     if seg_desde_ultimo > 300:
-        return _analise_estatistica_real(registros)
+        return _analise_estatistica_real(registros, referencia_tempo)
 
     # ================= REGRA DO ESPELHO (INTERVALO ENTRE OS DOIS ULTIMOS ALTOS) =================
     idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
@@ -109,18 +124,19 @@ def analisar(registros: List[Registro]) -> dict:
 
         if 30 <= intervalo_espelho <= 300:
             dt_prev = ultimo.dt + timedelta(seconds=intervalo_espelho)
-            if dt_prev > agora:
-                return {
-                    "decisao": "aguardar",
-                    "regra": "espelho_intervalo_altos",
-                    "motivo_regra": "Ha alto recente e o espelho entre os dois ultimos altos ainda esta ativo.",
-                    "intervalo_usado_segundos": intervalo_espelho,
-                    "hora_prevista": dt_prev.strftime("%H:%M:%S"),
-                }
+            dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
+            return {
+                "decisao": "aguardar",
+                "regra": "espelho_intervalo_altos",
+                "motivo_regra": "Ha alto recente e o espelho entre os dois ultimos altos ainda esta ativo.",
+                "intervalo_usado_segundos": intervalo_espelho,
+                "hora_prevista": dt_prev.strftime("%H:%M:%S"),
+            }
 
     # ================= REGRA 4-5 MINUTOS (apos expirar espelho) =================
     if seg_desde_ultimo < 240:
         dt_prev = ultimo.dt + timedelta(seconds=240)
+        dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
         return {
             "decisao": "aguardar",
             "regra": "regra_4_minutos",
@@ -129,6 +145,7 @@ def analisar(registros: List[Registro]) -> dict:
         }
 
     dt_prev = ultimo.dt + timedelta(seconds=300)
+    dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
     return {
         "decisao": "aguardar",
         "regra": "regra_5_minutos",
@@ -137,7 +154,7 @@ def analisar(registros: List[Registro]) -> dict:
     }
 
 
-def _analise_estatistica_real(registros: List[Registro]) -> dict:
+def _analise_estatistica_real(registros: List[Registro], referencia_tempo: datetime) -> dict:
     # ================= ESTATISTICA REAL =================
     idx_altos = [i for i, r in enumerate(registros) if r.mult >= 10]
     gaps = [idx_altos[i] - idx_altos[i - 1] for i in range(1, len(idx_altos))]
@@ -172,7 +189,8 @@ def _analise_estatistica_real(registros: List[Registro]) -> dict:
         fator = 1.4
 
     segundos_estimados = max(30, int(rodadas_faltantes * intervalo_medio * fator))
-    dt_prev = agora + timedelta(seconds=segundos_estimados)
+    dt_prev = referencia_tempo + timedelta(seconds=segundos_estimados)
+    dt_prev = garantir_hora_futura(dt_prev, referencia_tempo, 30)
 
     return {
         "decisao": "aguardar",
